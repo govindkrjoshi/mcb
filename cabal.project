@@ -1,0 +1,8 @@
+packages: .
+
+-- Development settings
+tests: True
+benchmarks: True
+
+-- Enable all warnings
+ghc-options: -Wall

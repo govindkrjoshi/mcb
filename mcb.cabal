@@ -1,0 +1,106 @@
+cabal-version: 3.0
+name:          mcb
+version:       0.1.0.0
+synopsis:      Production-grade circuit breaker for Haskell
+description:
+  A robust, type-safe circuit breaker implementation for building
+  resilient distributed systems in Haskell. Features include:
+  .
+  * Thread-safe state management using STM
+  * Configurable failure thresholds and timeouts
+  * Count-based sliding window for failure rate calculation
+  * Optional OpenTelemetry integration for observability
+  * Composable combinators (timeout, fallback)
+
+license:       BSD-3-Clause
+license-file:  LICENSE
+author:        Govind
+maintainer:    govind@example.com
+copyright:     2025 Govind
+category:      Control, Concurrency
+build-type:    Simple
+tested-with:   GHC == 9.8.4, GHC == 9.10.1, GHC == 9.12.2
+
+extra-doc-files:
+  README.md
+  CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/govind/circuit-breaker
+
+-- Common settings shared across components
+common warnings
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Wmissing-export-lists
+    -Wmissing-deriving-strategies
+    -Wunused-packages
+
+common common-deps
+  build-depends:
+    base >= 4.17 && < 5
+
+-- Core library dependencies
+common lib-deps
+  build-depends:
+    , stm >= 2.5 && < 2.6
+    , exceptions >= 0.10 && < 0.11
+    , time >= 1.9 && < 1.15
+    , text >= 2.0 && < 2.2
+    , containers >= 0.6 && < 0.8
+    , async >= 2.2 && < 2.3
+
+-- Optional OpenTelemetry support
+flag opentelemetry
+  description: Enable OpenTelemetry integration for metrics and tracing
+  default:     False
+  manual:      True
+
+library
+  import:           warnings, common-deps, lib-deps
+  exposed-modules:
+    CircuitBreaker
+  other-modules:
+  hs-source-dirs:   src
+  default-language: GHC2021
+
+  if flag(opentelemetry)
+    build-depends:  hs-opentelemetry-api >= 0.1 && < 0.2
+    cpp-options:    -DOPENTELEMETRY
+
+-- Test dependencies
+common test-deps
+  build-depends:
+    , tasty >= 1.4 && < 1.6
+    , tasty-hunit >= 0.10 && < 0.11
+    , tasty-hedgehog >= 1.4 && < 1.5
+    , hedgehog >= 1.2 && < 1.6
+
+test-suite mcb-test
+  import:           warnings, common-deps, test-deps
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  other-modules:
+    Test.Unit.Placeholder
+    Test.Property.Placeholder
+  hs-source-dirs:   test
+  build-depends:
+    mcb
+  default-language: GHC2021
+
+benchmark mcb-bench
+  import:           warnings, common-deps
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   bench
+  build-depends:
+      mcb
+    , criterion >= 1.6 && < 1.7
+  default-language: GHC2021
