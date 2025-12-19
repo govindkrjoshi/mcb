@@ -2,11 +2,11 @@ module Main (main) where
 
 import Test.Tasty (defaultMain, testGroup)
 
-import qualified Test.Unit.Placeholder as Unit
+import qualified Test.Unit.Types as Types
 import qualified Test.Property.Placeholder as Property
 
 main :: IO ()
 main = defaultMain $ testGroup "mcb"
-  [ Unit.tests
+  [ Types.tests
   , Property.tests
   ]

@@ -29,13 +29,49 @@
 --     pure "success"
 --   print result
 -- @
+--
+-- = Configuration
+--
+-- Use the builder pattern to configure the circuit breaker:
+--
+-- @
+-- config = defaultConfig
+--   & setFailureThreshold 0.5    -- Open when 50% of calls fail
+--   & setSlidingWindowSize 20    -- Consider last 20 calls
+--   & setWaitDuration 60         -- Wait 60 seconds before half-open
+--   & setHalfOpenPermits 3       -- Allow 3 test calls in half-open
+-- @
 
 module CircuitBreaker
-  ( -- * Overview
-    -- $overview
+  ( -- * Circuit Breaker State
+    State (..)
+
+    -- * Configuration
+  , CircuitBreakerConfig (..)
+  , defaultConfig
+
+    -- * Configuration Newtypes
+  , FailureThreshold
+  , unFailureThreshold
+  , mkFailureThreshold
+  , SlidingWindowSize
+  , unSlidingWindowSize
+  , mkSlidingWindowSize
+  , WaitDuration
+  , unWaitDuration
+  , mkWaitDuration
+  , HalfOpenPermits
+  , unHalfOpenPermits
+  , mkHalfOpenPermits
+
+    -- * Builder Pattern
+  , (&)
+  , setFailureThreshold
+  , setSlidingWindowSize
+  , setWaitDuration
+  , setHalfOpenPermits
+  , setExceptionPredicate
+  , setOnStateTransition
   ) where
 
--- $overview
---
--- This module will provide the circuit breaker functionality.
--- Implementation coming soon.
+import CircuitBreaker.Types

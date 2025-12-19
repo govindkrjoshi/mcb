@@ -67,7 +67,7 @@ library
   import:           warnings, common-deps, lib-deps
   exposed-modules:
     CircuitBreaker
-  other-modules:
+    CircuitBreaker.Types
   hs-source-dirs:   src
   default-language: GHC2021
 
@@ -88,7 +88,7 @@ test-suite mcb-test
   type:             exitcode-stdio-1.0
   main-is:          Main.hs
   other-modules:
-    Test.Unit.Placeholder
+    Test.Unit.Types
     Test.Property.Placeholder
   hs-source-dirs:   test
   build-depends:
