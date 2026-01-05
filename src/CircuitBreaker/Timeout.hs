@@ -16,11 +16,16 @@
 module CircuitBreaker.Timeout
   ( -- * Exceptions
     TimeoutException (..)
+
+    -- * Timeout Combinator
+  , withTimeout
   ) where
 
-import Control.Exception (Exception(..))
-import Data.Time.Clock (NominalDiffTime)
+import Control.Exception (Exception(..), throwIO)
+import Control.Monad.IO.Class (MonadIO(..))
+import Data.Time.Clock (NominalDiffTime, nominalDiffTimeToSeconds)
 import Data.Typeable (Typeable)
+import qualified System.Timeout as T
 
 -- | Exception thrown when an operation exceeds its timeout duration.
 --
@@ -46,3 +51,39 @@ instance Show TimeoutException where
 instance Exception TimeoutException where
   displayException (TimeoutException d) =
     "Operation timed out after " ++ show d
+
+-- | Execute an action with a timeout.
+--
+-- If the action completes within the specified duration, its result is returned.
+-- If the action exceeds the timeout, a 'TimeoutException' is thrown.
+--
+-- The timeout mechanism uses 'System.Timeout.timeout' which properly cancels
+-- the action thread when the timeout fires, preventing resource leaks.
+--
+-- ==== __Examples__
+--
+-- @
+-- -- Action that completes in time
+-- result <- withTimeout 5 $ do
+--   threadDelay 1000000  -- 1 second
+--   pure "done"
+-- -- result == "done"
+--
+-- -- Action that times out
+-- withTimeout 1 $ do
+--   threadDelay 5000000  -- 5 seconds
+--   pure "done"
+-- -- throws TimeoutException 1
+-- @
+--
+-- @since 0.1.0.0
+withTimeout :: MonadIO m => NominalDiffTime -> IO a -> m a
+withTimeout duration action = liftIO $ do
+  result <- T.timeout microseconds action
+  case result of
+    Just a  -> pure a
+    Nothing -> throwIO (TimeoutException duration)
+  where
+    -- Convert NominalDiffTime to microseconds for System.Timeout
+    microseconds :: Int
+    microseconds = round (nominalDiffTimeToSeconds duration * 1_000_000)
