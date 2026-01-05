@@ -76,6 +76,9 @@ module CircuitBreaker
     -- * Timeout
   , TimeoutException (..)
   , withTimeout
+  , seconds
+  , milliseconds
+  , minutes
   ) where
 
 import CircuitBreaker.Timeout

@@ -19,6 +19,11 @@ module CircuitBreaker.Timeout
 
     -- * Timeout Combinator
   , withTimeout
+
+    -- * Duration Helpers
+  , seconds
+  , milliseconds
+  , minutes
   ) where
 
 import Control.Exception (Exception(..), throwIO)
@@ -87,3 +92,42 @@ withTimeout duration action = liftIO $ do
     -- Convert NominalDiffTime to microseconds for System.Timeout
     microseconds :: Int
     microseconds = round (nominalDiffTimeToSeconds duration * 1_000_000)
+
+-- | Convert seconds to 'NominalDiffTime'.
+--
+-- ==== __Examples__
+--
+-- >>> seconds 5
+-- 5s
+--
+-- >>> withTimeout (seconds 5) someAction
+--
+-- @since 0.1.0.0
+seconds :: Double -> NominalDiffTime
+seconds = realToFrac
+
+-- | Convert milliseconds to 'NominalDiffTime'.
+--
+-- ==== __Examples__
+--
+-- >>> milliseconds 500
+-- 0.5s
+--
+-- >>> withTimeout (milliseconds 100) someAction
+--
+-- @since 0.1.0.0
+milliseconds :: Double -> NominalDiffTime
+milliseconds ms = realToFrac (ms / 1000)
+
+-- | Convert minutes to 'NominalDiffTime'.
+--
+-- ==== __Examples__
+--
+-- >>> minutes 2
+-- 120s
+--
+-- >>> withTimeout (minutes 5) someLongRunningAction
+--
+-- @since 0.1.0.0
+minutes :: Double -> NominalDiffTime
+minutes m = realToFrac (m * 60)
