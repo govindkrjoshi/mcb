@@ -72,6 +72,10 @@ module CircuitBreaker
   , setHalfOpenPermits
   , setExceptionPredicate
   , setOnStateTransition
+
+    -- * Timeout
+  , TimeoutException (..)
   ) where
 
+import CircuitBreaker.Timeout
 import CircuitBreaker.Types
