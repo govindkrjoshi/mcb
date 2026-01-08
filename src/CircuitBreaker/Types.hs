@@ -71,7 +71,10 @@ data State
 -- requests fail.
 --
 -- @since 0.1.0.0
-newtype FailureThreshold = FailureThreshold { unFailureThreshold :: Double }
+newtype FailureThreshold = FailureThreshold
+  { unFailureThreshold :: Double
+    -- ^ Extract the raw 'Double' value from a 'FailureThreshold'.
+  }
   deriving stock (Eq, Show, Ord)
 
 -- | Create a 'FailureThreshold' with validation.
@@ -101,7 +104,10 @@ mkFailureThreshold x
 -- calculating the failure rate.
 --
 -- @since 0.1.0.0
-newtype SlidingWindowSize = SlidingWindowSize { unSlidingWindowSize :: Int }
+newtype SlidingWindowSize = SlidingWindowSize
+  { unSlidingWindowSize :: Int
+    -- ^ Extract the raw 'Int' value from a 'SlidingWindowSize'.
+  }
   deriving stock (Eq, Show, Ord)
 
 -- | Create a 'SlidingWindowSize' with validation.
@@ -128,7 +134,10 @@ mkSlidingWindowSize x
 -- will not allow any requests through.
 --
 -- @since 0.1.0.0
-newtype WaitDuration = WaitDuration { unWaitDuration :: NominalDiffTime }
+newtype WaitDuration = WaitDuration
+  { unWaitDuration :: NominalDiffTime
+    -- ^ Extract the raw 'NominalDiffTime' value from a 'WaitDuration'.
+  }
   deriving stock (Eq, Show, Ord)
 
 -- | Create a 'WaitDuration' with validation.
@@ -155,7 +164,10 @@ mkWaitDuration x
 -- through to determine if the service has recovered.
 --
 -- @since 0.1.0.0
-newtype HalfOpenPermits = HalfOpenPermits { unHalfOpenPermits :: Int }
+newtype HalfOpenPermits = HalfOpenPermits
+  { unHalfOpenPermits :: Int
+    -- ^ Extract the raw 'Int' value from 'HalfOpenPermits'.
+  }
   deriving stock (Eq, Show, Ord)
 
 -- | Create 'HalfOpenPermits' with validation.

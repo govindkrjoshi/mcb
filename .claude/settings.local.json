@@ -23,7 +23,10 @@
       "Bash(git worktree:*)",
       "Bash(git reset:*)",
       "Bash(git branch:*)",
-      "Bash(bd ready:*)"
+      "Bash(bd ready:*)",
+      "Bash(git push)",
+      "Bash(pkill:*)",
+      "Bash(cabal haddock:*)"
     ]
   }
 }
