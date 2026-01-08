@@ -69,6 +69,7 @@ library
     CircuitBreaker
     CircuitBreaker.Bulkhead
     CircuitBreaker.Exceptions
+    CircuitBreaker.Fallback
     CircuitBreaker.Predicate
     CircuitBreaker.RateLimiter
     CircuitBreaker.Resilience
@@ -103,6 +104,7 @@ test-suite mcb-test
   other-modules:
     Test.Unit.Bulkhead
     Test.Unit.Exceptions
+    Test.Unit.Fallback
     Test.Unit.Predicate
     Test.Unit.RateLimiter
     Test.Unit.Retry
@@ -113,7 +115,10 @@ test-suite mcb-test
     Test.Property.Placeholder
     Test.Property.SlidingWindow
     Test.Property.State
+    Test.Integration.Fallback
     Test.Integration.Resilience
+    Test.Integration.TimeoutCircuitBreaker
+    Test.Integration.TimeoutCircuitBreakerConcurrency
     Test.Integration.WithCircuitBreaker
     Test.Performance.WithCircuitBreaker
   hs-source-dirs:   test

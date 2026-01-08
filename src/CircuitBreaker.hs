@@ -456,11 +456,26 @@ module CircuitBreaker
   , addBulkhead
   , addRateLimiter
   , addRetry
+
+    -- * Fallback
+  , withFallback
+  , withFallbackOn
+  , withFallbackValue
+  , withFallbackValueOn
+
+    -- * Fallback Predicates
+  , isCircuitBreakerException
+  , isCircuitOpenException
+  , isTimeoutException
+  , isRateLimitedException
+  , isBulkheadRejectedException
+  , isRetriesExhaustedException
   ) where
 
 import CircuitBreaker.Bulkhead
 import CircuitBreaker.Core
 import CircuitBreaker.Exceptions
+import CircuitBreaker.Fallback
 import CircuitBreaker.Internal.State
 import CircuitBreaker.Predicate
 import CircuitBreaker.RateLimiter
