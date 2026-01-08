@@ -9,6 +9,7 @@ import qualified Test.Unit.SlidingWindow as SlidingWindowUnit
 import qualified Test.Unit.State as State
 import qualified Test.Property.Placeholder as Property
 import qualified Test.Property.SlidingWindow as SlidingWindowProp
+import qualified Test.Property.State as StateProp
 
 main :: IO ()
 main = defaultMain $ testGroup "mcb"
@@ -19,4 +20,5 @@ main = defaultMain $ testGroup "mcb"
   , State.tests
   , Property.tests
   , SlidingWindowProp.tests
+  , StateProp.tests
   ]

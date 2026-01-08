@@ -100,6 +100,7 @@ test-suite mcb-test
     Test.Unit.State
     Test.Property.Placeholder
     Test.Property.SlidingWindow
+    Test.Property.State
   hs-source-dirs:   test
   build-depends:
       mcb

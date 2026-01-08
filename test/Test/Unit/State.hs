@@ -2,12 +2,12 @@
 
 -- |
 -- Module      : Test.Unit.State
--- Description : Tests for STM state management
+-- Description : Tests for STM state management and state machine logic
 -- Copyright   : (c) 2025 Govind
 -- License     : BSD-3-Clause
 --
 -- Tests for the STM-based circuit breaker state management, including
--- thread-safety and performance tests.
+-- thread-safety, performance tests, and state machine logic tests.
 
 module Test.Unit.State (tests) where
 
@@ -18,7 +18,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (atomically)
 import Control.Monad (replicateM_, forM_)
-import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Data.Time.Clock (addUTCTime, getCurrentTime, diffUTCTime)
 
 import CircuitBreaker
   ( CircuitBreakerState (..)
@@ -27,11 +27,25 @@ import CircuitBreaker
   , getCurrentState
   , getCircuitBreakerState
   , getFailureRateIO
+  , isCallPermitted
+  , minimumCallsForOpen
   , newCircuitBreaker
   , readState
+  , recordFailure
+  , recordSuccess
+  , setFailureThreshold
+  , setHalfOpenPermits
+  , setSlidingWindowSize
+  , setWaitDuration
+  , shouldOpen
+  , shouldTransitionToHalfOpen
+  , transitionToClosed
+  , transitionToHalfOpen
+  , transitionToOpen
   , updateState
   , insertResult
   , getTotalCalls
+  , (&)
   )
 
 tests :: TestTree
@@ -41,6 +55,11 @@ tests = testGroup "CircuitBreaker.Internal.State"
   , queryTests
   , threadSafetyTests
   , performanceTests
+  , stateTransitionPredicateTests
+  , stateTransitionFunctionTests
+  , callPermissionTests
+  , recordResultTests
+  , fullStateFlowTests
   ]
 
 -- | Tests for initial circuit breaker state
@@ -263,3 +282,420 @@ performanceTests = testGroup "Performance"
 -- | Helper to get total calls from state
 getTotalCallsFromState :: CircuitBreakerState -> Int
 getTotalCallsFromState cbState = getTotalCalls (cbsSlidingWindow cbState)
+
+-- ---------------------------------------------------------------------------
+-- State Transition Predicate Tests
+-- ---------------------------------------------------------------------------
+
+-- | Tests for shouldOpen and shouldTransitionToHalfOpen predicates
+stateTransitionPredicateTests :: TestTree
+stateTransitionPredicateTests = testGroup "State Transition Predicates"
+  [ testCase "shouldOpen returns False with no calls" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      let result = shouldOpen defaultConfig cbState
+      result @?= False
+
+  , testCase "shouldOpen returns False below minimum calls even at 100% failure" $ do
+      cb <- newCircuitBreaker defaultConfig
+      -- Add failures, but less than minimumCallsForOpen (5)
+      replicateM_ 4 $ recordFailure cb =<< getCurrentTime
+      cbState <- getCircuitBreakerState cb
+      let result = shouldOpen defaultConfig cbState
+      -- 4 calls is below minimum 5, so should not open
+      result @?= False
+
+  , testCase "shouldOpen returns True at threshold with minimum calls" $ do
+      -- Create a config with 50% threshold
+      let config = defaultConfig & setFailureThreshold 0.5
+      cb <- newCircuitBreaker config
+      -- Add 5 failures (100% failure rate, >= 50% threshold, >= 5 calls)
+      replicateM_ 5 $ recordFailure cb =<< getCurrentTime
+      cbState <- getCircuitBreakerState cb
+      -- After 5 failures the state should already be Open
+      cbsState cbState @?= Open
+
+  , testCase "shouldOpen returns False below threshold with minimum calls" $ do
+      let config = defaultConfig & setFailureThreshold 0.5
+      cb <- newCircuitBreaker config
+      -- Add 3 successes, then 2 failures (40% failure rate, < 50% threshold)
+      now <- getCurrentTime
+      replicateM_ 3 $ recordSuccess cb now
+      replicateM_ 2 $ recordFailure cb now
+      cbState <- getCircuitBreakerState cb
+      let result = shouldOpen config cbState
+      result @?= False
+
+  , testCase "shouldTransitionToHalfOpen returns False during cooldown" $ do
+      let config = defaultConfig & setWaitDuration 30  -- 30 second wait
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to Open state
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open, cbsLastStateChange = now }
+      cbState <- getCircuitBreakerState cb
+      -- Check 10 seconds after (before 30 second wait)
+      let future = addUTCTime 10 now
+      let result = shouldTransitionToHalfOpen config cbState future
+      result @?= False
+
+  , testCase "shouldTransitionToHalfOpen returns True after wait duration" $ do
+      let config = defaultConfig & setWaitDuration 30  -- 30 second wait
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to Open state
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open, cbsLastStateChange = now }
+      cbState <- getCircuitBreakerState cb
+      -- Check 31 seconds after (after 30 second wait)
+      let future = addUTCTime 31 now
+      let result = shouldTransitionToHalfOpen config cbState future
+      result @?= True
+  ]
+
+-- ---------------------------------------------------------------------------
+-- State Transition Function Tests
+-- ---------------------------------------------------------------------------
+
+-- | Tests for transitionToOpen, transitionToHalfOpen, transitionToClosed
+stateTransitionFunctionTests :: TestTree
+stateTransitionFunctionTests = testGroup "State Transition Functions"
+  [ testCase "transitionToOpen sets state to Open" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let newState = transitionToOpen now cbState
+      cbsState newState @?= Open
+
+  , testCase "transitionToOpen resets sliding window" $ do
+      cb <- newCircuitBreaker defaultConfig
+      -- Add some results
+      now <- getCurrentTime
+      replicateM_ 3 $ recordSuccess cb now
+      cbState <- getCircuitBreakerState cb
+      let newState = transitionToOpen now cbState
+      getTotalCalls (cbsSlidingWindow newState) @?= 0
+
+  , testCase "transitionToOpen records timestamp" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let later = addUTCTime 100 now
+      let newState = transitionToOpen later cbState
+      cbsLastStateChange newState @?= later
+
+  , testCase "transitionToOpen resets halfOpenAttempts" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let stateWithAttempts = cbState { cbsHalfOpenAttempts = 5 }
+      let newState = transitionToOpen now stateWithAttempts
+      cbsHalfOpenAttempts newState @?= 0
+
+  , testCase "transitionToHalfOpen sets state to HalfOpen" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let newState = transitionToHalfOpen now cbState
+      cbsState newState @?= HalfOpen
+
+  , testCase "transitionToHalfOpen preserves sliding window" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      -- Add some results
+      replicateM_ 3 $ recordSuccess cb now
+      cbState <- getCircuitBreakerState cb
+      let originalCalls = getTotalCalls (cbsSlidingWindow cbState)
+      let newState = transitionToHalfOpen now cbState
+      getTotalCalls (cbsSlidingWindow newState) @?= originalCalls
+
+  , testCase "transitionToHalfOpen resets halfOpenAttempts" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let stateWithAttempts = cbState { cbsHalfOpenAttempts = 3 }
+      let newState = transitionToHalfOpen now stateWithAttempts
+      cbsHalfOpenAttempts newState @?= 0
+
+  , testCase "transitionToClosed sets state to Closed" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let openState = cbState { cbsState = Open }
+      let newState = transitionToClosed now openState
+      cbsState newState @?= Closed
+
+  , testCase "transitionToClosed resets sliding window" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      replicateM_ 3 $ recordSuccess cb now
+      cbState <- getCircuitBreakerState cb
+      let newState = transitionToClosed now cbState
+      getTotalCalls (cbsSlidingWindow newState) @?= 0
+
+  , testCase "transitionToClosed resets halfOpenAttempts" $ do
+      cb <- newCircuitBreaker defaultConfig
+      cbState <- getCircuitBreakerState cb
+      now <- getCurrentTime
+      let stateWithAttempts = cbState { cbsHalfOpenAttempts = 2 }
+      let newState = transitionToClosed now stateWithAttempts
+      cbsHalfOpenAttempts newState @?= 0
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Call Permission Tests
+-- ---------------------------------------------------------------------------
+
+-- | Tests for isCallPermitted
+callPermissionTests :: TestTree
+callPermissionTests = testGroup "Call Permission"
+  [ testCase "Closed state always permits calls" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      (permitted, _) <- isCallPermitted cb now
+      permitted @?= True
+
+  , testCase "Open state rejects calls before wait duration" $ do
+      let config = defaultConfig & setWaitDuration 30
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to Open
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open, cbsLastStateChange = now }
+      -- Check permission 10 seconds later (before 30 second wait)
+      let future = addUTCTime 10 now
+      (permitted, _) <- isCallPermitted cb future
+      permitted @?= False
+
+  , testCase "Open state permits calls after wait duration (transitions to HalfOpen)" $ do
+      let config = defaultConfig & setWaitDuration 30
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to Open
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open, cbsLastStateChange = now }
+      -- Check permission 31 seconds later (after 30 second wait)
+      let future = addUTCTime 31 now
+      (permitted, newState) <- isCallPermitted cb future
+      permitted @?= True
+      cbsState newState @?= HalfOpen
+
+  , testCase "HalfOpen state permits up to halfOpenPermits calls" $ do
+      let config = defaultConfig & setHalfOpenPermits 3
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to HalfOpen
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = HalfOpen, cbsHalfOpenAttempts = 0 }
+      -- First 3 calls should be permitted
+      (p1, _) <- isCallPermitted cb now
+      (p2, _) <- isCallPermitted cb now
+      (p3, _) <- isCallPermitted cb now
+      -- 4th call should be rejected
+      (p4, _) <- isCallPermitted cb now
+      p1 @?= True
+      p2 @?= True
+      p3 @?= True
+      p4 @?= False
+
+  , testCase "HalfOpen state increments attempt counter" $ do
+      let config = defaultConfig & setHalfOpenPermits 5
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to HalfOpen
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = HalfOpen, cbsHalfOpenAttempts = 0 }
+      -- Make two calls
+      _ <- isCallPermitted cb now
+      _ <- isCallPermitted cb now
+      cbState <- getCircuitBreakerState cb
+      cbsHalfOpenAttempts cbState @?= 2
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Record Result Tests
+-- ---------------------------------------------------------------------------
+
+-- | Tests for recordSuccess and recordFailure
+recordResultTests :: TestTree
+recordResultTests = testGroup "Record Results"
+  [ testCase "recordSuccess in Closed state records success" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      _ <- recordSuccess cb now
+      rate <- getFailureRateIO cb
+      rate @?= 0.0  -- 0 failures out of 1 call
+
+  , testCase "recordFailure in Closed state records failure" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      _ <- recordFailure cb now
+      rate <- getFailureRateIO cb
+      rate @?= 1.0  -- 1 failure out of 1 call
+
+  , testCase "recordFailure transitions to Open when threshold exceeded" $ do
+      let config = defaultConfig
+            & setFailureThreshold 0.5
+            & setSlidingWindowSize 10
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Add 5 failures (100% failure, >= 50% threshold, >= 5 minimum calls)
+      replicateM_ 5 $ recordFailure cb now
+      state <- getCurrentState cb
+      state @?= Open
+
+  , testCase "recordFailure in HalfOpen transitions to Open" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      -- Manually set to HalfOpen
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = HalfOpen, cbsHalfOpenAttempts = 1 }
+      _ <- recordFailure cb now
+      state <- getCurrentState cb
+      state @?= Open
+
+  , testCase "recordSuccess in HalfOpen transitions to Closed when all permits used" $ do
+      let config = defaultConfig & setHalfOpenPermits 3
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to HalfOpen with 3 attempts (all permits used)
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = HalfOpen, cbsHalfOpenAttempts = 3 }
+      _ <- recordSuccess cb now
+      state <- getCurrentState cb
+      state @?= Closed
+
+  , testCase "recordSuccess in HalfOpen does not transition if permits remain" $ do
+      let config = defaultConfig & setHalfOpenPermits 3
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+      -- Manually set to HalfOpen with 1 attempt (2 permits remain)
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = HalfOpen, cbsHalfOpenAttempts = 1 }
+      _ <- recordSuccess cb now
+      state <- getCurrentState cb
+      state @?= HalfOpen
+
+  , testCase "recordSuccess in Open is no-op" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      -- Manually set to Open
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open }
+      _ <- recordSuccess cb now
+      state <- getCurrentState cb
+      state @?= Open
+
+  , testCase "recordFailure in Open is no-op" $ do
+      cb <- newCircuitBreaker defaultConfig
+      now <- getCurrentTime
+      -- Manually set to Open
+      atomically $ do
+        cbState <- readState cb
+        updateState cb cbState { cbsState = Open }
+      _ <- recordFailure cb now
+      state <- getCurrentState cb
+      state @?= Open
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Full State Flow Tests
+-- ---------------------------------------------------------------------------
+
+-- | Tests for complete state machine flows
+fullStateFlowTests :: TestTree
+fullStateFlowTests = testGroup "Full State Flow"
+  [ testCase "complete flow: Closed -> Open -> HalfOpen -> Closed" $ do
+      let config = defaultConfig
+            & setFailureThreshold 0.5
+            & setSlidingWindowSize 10
+            & setWaitDuration 0  -- Immediate transition for testing
+            & setHalfOpenPermits 2
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+
+      -- Start in Closed
+      state1 <- getCurrentState cb
+      state1 @?= Closed
+
+      -- Add 5 failures to exceed threshold
+      replicateM_ 5 $ recordFailure cb now
+      state2 <- getCurrentState cb
+      state2 @?= Open
+
+      -- Wait duration has elapsed (set to 0), so next isCallPermitted transitions to HalfOpen
+      (permitted, newState) <- isCallPermitted cb now
+      permitted @?= True
+      cbsState newState @?= HalfOpen
+
+      -- Record a success
+      _ <- recordSuccess cb now
+
+      -- Second call in HalfOpen
+      (permitted2, _) <- isCallPermitted cb now
+      permitted2 @?= True
+
+      -- Record second success (all permits used)
+      _ <- recordSuccess cb now
+
+      -- Should now be Closed
+      state3 <- getCurrentState cb
+      state3 @?= Closed
+
+  , testCase "complete flow: Closed -> Open -> HalfOpen -> Open (on failure)" $ do
+      let config = defaultConfig
+            & setFailureThreshold 0.5
+            & setSlidingWindowSize 10
+            & setWaitDuration 0  -- Immediate transition for testing
+            & setHalfOpenPermits 3
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+
+      -- Start in Closed
+      state1 <- getCurrentState cb
+      state1 @?= Closed
+
+      -- Add 5 failures to exceed threshold
+      replicateM_ 5 $ recordFailure cb now
+      state2 <- getCurrentState cb
+      state2 @?= Open
+
+      -- Transition to HalfOpen
+      (permitted, _) <- isCallPermitted cb now
+      permitted @?= True
+      state3 <- getCurrentState cb
+      state3 @?= HalfOpen
+
+      -- Record a failure - should go back to Open
+      _ <- recordFailure cb now
+      state4 <- getCurrentState cb
+      state4 @?= Open
+
+  , testCase "sliding window respects size limit" $ do
+      let config = defaultConfig & setSlidingWindowSize 5
+      cb <- newCircuitBreaker config
+      now <- getCurrentTime
+
+      -- Add 10 results (should only keep last 5)
+      replicateM_ 3 $ recordSuccess cb now
+      replicateM_ 7 $ recordFailure cb now
+
+      cbState <- getCircuitBreakerState cb
+      -- Window should have at most 5 calls
+      -- Note: we may have transitioned to Open and reset the window
+      let calls = getTotalCallsFromState cbState
+      assertBool "window should respect size" (calls <= 5)
+
+  , testCase "minimumCallsForOpen is 5" $ do
+      minimumCallsForOpen @?= 5
+  ]

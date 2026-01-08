@@ -87,6 +87,28 @@ module CircuitBreaker
   , getFailureRateIO
   , getCircuitBreakerState
 
+    -- * State Transition Predicates
+  , shouldOpen
+  , shouldTransitionToHalfOpen
+
+    -- * State Transition Functions
+  , transitionToOpen
+  , transitionToHalfOpen
+  , transitionToClosed
+
+    -- * Call Permission
+  , isCallPermitted
+  , isCallPermittedSTM
+
+    -- * Result Recording
+  , recordSuccess
+  , recordFailure
+  , recordSuccessSTM
+  , recordFailureSTM
+
+    -- * Constants
+  , minimumCallsForOpen
+
     -- * Exceptions
   , CircuitBreakerException (..)
   , CircuitOpenException (..)

@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(bd create --title=\"Core Data Types & Configuration\" --type=task --priority=2 --body=\"$\\(cat <<''EOF''\n**Story 1: Core Data Types & Configuration**\n\nAs a library developer, I want to define the core data types and configuration system so that users can create and configure circuit breakers with validated settings.\n\n## Description\nImplement the foundational types including State, CircuitBreakerState, CircuitBreaker, and CircuitBreakerConfig. Create smart constructors with validation for all configuration values \\(FailureThreshold, SlidingWindow, WaitDuration, etc.\\) and a builder pattern API for ergonomic configuration.\n\n## Acceptance Criteria\n- State ADT defined with Closed, Open, and HalfOpen constructors\n- CircuitBreakerState record contains: currentState, slidingWindow, lastStateTransition, halfOpenAttempts\n- CircuitBreaker record contains: cbName, cbConfig, cbState \\(TVar\\)\n- CircuitBreakerConfig record contains: failureThreshold, slidingWindowSize, waitDurationMs, permittedCallsInHalfOpen, exceptionPredicate, onStateTransition\n- Newtype wrappers created for: FailureThreshold, SlidingWindow, WaitDuration, HalfOpenPermits\n- Smart constructor mkFailureThreshold validates: 0 < threshold <= 1\n- Smart constructor mkSlidingWindow validates: windowSize > 0\n- Smart constructor mkWaitDuration validates: duration >= 0\n- Smart constructor mkHalfOpenPermits validates: permits > 0\n- All smart constructors return Either String for validation errors\n- defaultConfig provided with sensible defaults\n- Builder pattern operators \\(&, setFailureThreshold, etc.\\) allow chaining\n- All types have Eq, Show instances where appropriate\n- Haddock documentation for all public types and functions\n- Unit tests verify validation rules reject invalid values\n\n## Technical Notes\n- Use newtype wrappers to prevent mixing up configuration parameters\n- Smart constructors ensure type-safe construction after validation\n- Builder pattern should use lens-style operators for familiarity\n\n**Estimated Effort:** 2 days\n**Phase:** 1 - Foundation\n**Dependencies:** None\nEOF\n\\)\")",
+      "Bash(bd create --title=\"Sliding Window Implementation\" --type=task --priority=2 --body=\"$\\(cat <<''EOF''\n**Story 2: Sliding Window Implementation**\n\nAs a library developer, I want to implement a count-based sliding window so that the circuit breaker can track failure rates over recent operations.\n\n## Description\nImplement a Seq-based sliding window that tracks the last N operation results \\(success/failure\\) with cached failure count for O\\(1\\) failure rate calculation. The window should efficiently handle insertions, maintain a fixed size, and provide accurate failure rate calculations.\n\n## Acceptance Criteria\n- SlidingWindow data type contains: Seq Bool \\(True=success, False=failure\\), windowSize, cachedFailureCount\n- newSlidingWindow creates empty window with specified size\n- insertResult adds a result and maintains window size \\(removes oldest if at capacity\\)\n- insertResult updates cachedFailureCount correctly\n- getFailureRate returns Double between 0.0 and 1.0 in O\\(1\\) time using cached count\n- getTotalCalls returns number of results in window\n- isEmpty returns True if window contains no results\n- isFull returns True if window has reached windowSize\n- reset clears all results and resets cached count\n- Window maintains FIFO ordering \\(oldest results evicted first\\)\n- Property test: failure rate matches actual count of False values / total calls\n- Property test: window never exceeds windowSize\n- Unit tests for empty, full, and mixed windows\n\n## Technical Notes\n- Use Data.Sequence for efficient insertions and removals\n- Cache failure count to avoid O\\(n\\) traversal on every check\n- Consider strict fields \\(!\\) to avoid space leaks\n\n**Estimated Effort:** 2 days\n**Phase:** 1 - Foundation\n**Dependencies:** None\nEOF\n\\)\")",
+      "Bash(bd:*)",
+      "Bash(mkdir:*)",
+      "Bash(cabal build:*)",
+      "Bash(ghc --version:*)",
+      "Bash(cabal:*)",
+      "Bash(git add:*)",
+      "Bash(bd list:*)",
+      "Bash(bd show:*)",
+      "Bash(git checkout:*)",
+      "Bash(bd update:*)",
+      "Bash(cabal test:*)",
+      "Bash(git commit:*)",
+      "Bash(bd close:*)",
+      "Bash(git merge:*)",
+      "Bash(cabal bench:*)",
+      "Bash(bd sync:*)",
+      "Bash(git worktree:*)",
+      "Bash(git reset:*)",
+      "Bash(git branch:*)",
+      "Bash(bd ready:*)"
+    ]
+  }
+}
