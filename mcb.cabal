@@ -93,6 +93,7 @@ test-suite mcb-test
     Test.Unit.Types
     Test.Unit.Timeout
     Test.Property.Placeholder
+    Test.Property.SlidingWindow
   hs-source-dirs:   test
   build-depends:
     mcb
