@@ -369,14 +369,18 @@ stateTransitionFunctionTests = testGroup "State Transition Functions"
       let newState = transitionToOpen now cbState
       cbsState newState @?= Open
 
-  , testCase "transitionToOpen resets sliding window" $ do
+  , testCase "transitionToOpen preserves sliding window (mcb-oz8 fix)" $ do
+      -- The sliding window is NOT reset when transitioning to Open.
+      -- This is intentional (mcb-oz8 fix): in-flight calls that were permitted
+      -- before the transition should still have their results recorded accurately.
       cb <- newCircuitBreaker defaultConfig
       -- Add some results
       now <- getCurrentTime
       replicateM_ 3 $ recordSuccess cb now
       cbState <- getCircuitBreakerState cb
       let newState = transitionToOpen now cbState
-      getTotalCalls (cbsSlidingWindow newState) @?= 0
+      -- Window should be preserved, not reset
+      getTotalCalls (cbsSlidingWindow newState) @?= 3
 
   , testCase "transitionToOpen records timestamp" $ do
       cb <- newCircuitBreaker defaultConfig

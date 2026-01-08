@@ -39,6 +39,12 @@
 -- 'onStateTransition' callback from the config is invoked. This callback
 -- runs outside of the STM transaction to allow IO operations like logging.
 --
+-- = Idempotency
+--
+-- Result recording is idempotent: each action execution records exactly one
+-- result (success or failure), even under async exceptions or concurrent load.
+-- This is achieved using a one-shot recording mechanism protected by mask.
+--
 -- @since 0.1.0.0
 
 module CircuitBreaker.Core
@@ -46,9 +52,10 @@ module CircuitBreaker.Core
     withCircuitBreaker
   ) where
 
-import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
 import Control.Exception (SomeException)
-import Control.Monad.Catch (MonadCatch, try, throwM)
+import Control.Monad (when)
+import Control.Monad.Catch (MonadMask, mask, try, throwM, onException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Time.Clock (getCurrentTime)
 
@@ -74,7 +81,7 @@ import CircuitBreaker.Types
 -- 2. Throws 'CircuitOpenException' immediately if the circuit is open
 -- 3. Executes the user action if the call is permitted
 -- 4. Catches any exceptions from the user action
--- 5. Records success or failure in the circuit breaker state
+-- 5. Records success or failure in the circuit breaker state (exactly once)
 -- 6. Triggers state transition callbacks if the state changed
 -- 7. Re-throws any exception from the user action
 --
@@ -105,6 +112,16 @@ import CircuitBreaker.Types
 -- This function is thread-safe. Multiple threads can call 'withCircuitBreaker'
 -- concurrently on the same 'CircuitBreaker' instance. State changes are atomic.
 --
+-- ==== __Idempotency__
+--
+-- Result recording is guaranteed to happen exactly once per action execution,
+-- even under async exceptions (like timeouts) or concurrent load. This is
+-- achieved using a one-shot recording mechanism that:
+--
+-- * Uses a TVar flag to ensure recording happens at most once
+-- * Uses 'mask' to ensure recording is not interrupted by async exceptions
+-- * Records in an 'onException' handler to ensure recording even if interrupted
+--
 -- ==== __Performance__
 --
 -- Overhead is minimal (less than 1ms) as it involves:
@@ -115,12 +132,12 @@ import CircuitBreaker.Types
 --
 -- @since 0.1.0.0
 withCircuitBreaker
-  :: forall m a. (MonadIO m, MonadCatch m)
+  :: forall m a. (MonadIO m, MonadMask m)
   => CircuitBreaker
   -> m a
   -> m a
 withCircuitBreaker cb action = do
-  -- Get current time for permission check and result recording
+  -- Get current time for permission check
   now <- liftIO getCurrentTime
 
   -- Step 1: Check if call is permitted (STM transaction)
@@ -140,43 +157,35 @@ withCircuitBreaker cb action = do
   if not permitted
     then throwM $ CircuitOpenException circuitName
     else do
-      -- Step 3: Execute the user action and catch any exceptions
-      result <- try action
+      -- Create a one-shot recording flag to ensure idempotent result recording.
+      -- This TVar is set to True after recording, preventing double-counting.
+      recordedFlag <- liftIO $ newTVarIO False
 
-      case result of
-        Right value -> do
-          -- Step 4a: Record success and check for state transition
-          (oldState, newState) <- liftIO $ do
-            recordNow <- getCurrentTime
-            atomically $ do
-              stateAfter <- recordSuccessSTM cb recordNow
-              pure (cbsState stateAfterPermissionCheck, cbsState stateAfter)
+      -- Use mask to control when async exceptions are delivered.
+      -- This ensures result recording completes even if an async exception
+      -- (like TimeoutException) is pending.
+      mask $ \restore -> do
+        -- Execute the action with async exceptions restored, but set up
+        -- an onException handler to record failure if interrupted.
+        result <- restore (try action) `onException`
+          -- If an async exception interrupts us, record failure (once)
+          liftIO (recordResultOnce recordedFlag stateAfterPermissionCheck True)
 
-          -- Step 5: Execute callback outside STM if state changed
-          liftIO $ invokeCallbackIfChanged config oldState newState
+        case result of
+          Right value -> do
+            -- Step 4a: Record success (once) and check for state transition
+            liftIO $ recordResultOnce recordedFlag stateAfterPermissionCheck False
+            pure value
 
-          -- Return the successful result
-          pure value
+          Left (ex :: SomeException) -> do
+            -- Step 4b: Determine if exception counts as failure
+            let countsAsFailure = exceptionPredicate config ex
 
-        Left (ex :: SomeException) -> do
-          -- Step 4b: Determine if exception counts as failure
-          let countsAsFailure = exceptionPredicate config ex
+            -- Record result based on predicate (once)
+            liftIO $ recordResultOnce recordedFlag stateAfterPermissionCheck countsAsFailure
 
-          -- Record result based on predicate
-          (oldState, newState) <- liftIO $ do
-            recordNow <- getCurrentTime
-            atomically $ do
-              stateAfter <-
-                if countsAsFailure
-                  then recordFailureSTM cb recordNow
-                  else recordSuccessSTM cb recordNow
-              pure (cbsState stateAfterPermissionCheck, cbsState stateAfter)
-
-          -- Step 5: Execute callback outside STM if state changed
-          liftIO $ invokeCallbackIfChanged config oldState newState
-
-          -- Step 6: Re-throw the original exception
-          throwM ex
+            -- Step 5: Re-throw the original exception
+            throwM ex
   where
     config :: CircuitBreakerConfig
     config = cbConfig cb
@@ -185,6 +194,32 @@ withCircuitBreaker cb action = do
     -- In a future version, this could be a dedicated name field
     circuitName :: String
     circuitName = "circuit-breaker"
+
+    -- | Record a result exactly once, ensuring idempotency.
+    --
+    -- This function uses a TVar flag to ensure that even if called multiple
+    -- times (e.g., from both normal path and exception handler), the result
+    -- is recorded at most once.
+    --
+    -- The function is safe to call from any thread and handles the case
+    -- where another recording has already happened.
+    recordResultOnce :: TVar Bool -> CircuitBreakerState -> Bool -> IO ()
+    recordResultOnce recordedFlag stateAfterPermissionCheck isFailure = do
+      recordNow <- getCurrentTime
+      (shouldRecord, oldState, newState) <- atomically $ do
+        alreadyRecorded <- readTVar recordedFlag
+        if alreadyRecorded
+          then pure (False, cbsState stateAfterPermissionCheck, cbsState stateAfterPermissionCheck)
+          else do
+            writeTVar recordedFlag True
+            stateAfter <-
+              if isFailure
+                then recordFailureSTM cb recordNow
+                else recordSuccessSTM cb recordNow
+            pure (True, cbsState stateAfterPermissionCheck, cbsState stateAfter)
+
+      -- Execute callback outside STM if state changed and we recorded
+      when shouldRecord $ invokeCallbackIfChanged config oldState newState
 
 -- | Invoke the state transition callback if the state changed.
 --

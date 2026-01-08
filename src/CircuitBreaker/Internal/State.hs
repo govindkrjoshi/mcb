@@ -76,6 +76,7 @@ module CircuitBreaker.Internal.State
 
     -- * Constants
   , minimumCallsForOpen
+  , minimumCallsForOpenWithWindowSize
   ) where
 
 import Control.Concurrent.STM (STM, TVar, atomically, newTVarIO, readTVar, writeTVar)
@@ -273,6 +274,32 @@ getCircuitBreakerState cb = atomically $ readState cb
 minimumCallsForOpen :: Int
 minimumCallsForOpen = 5
 
+-- | Calculate the minimum calls for opening based on sliding window size.
+--
+-- Returns the larger of 'minimumCallsForOpen' (5) or 10% of the window size.
+-- This ensures that under concurrent load, we have enough samples to make
+-- a meaningful decision about whether to open the circuit.
+--
+-- This fix addresses the "timeout storm" problem (mcb-abq) where under high
+-- concurrent load, failing requests might be recorded before successful ones,
+-- causing a transient spike in failure rate that prematurely opens the circuit.
+--
+-- ==== __Examples__
+--
+-- >>> minimumCallsForOpenWithWindowSize 10
+-- 5
+--
+-- >>> minimumCallsForOpenWithWindowSize 100
+-- 10
+--
+-- >>> minimumCallsForOpenWithWindowSize 1000
+-- 100
+--
+-- @since 0.1.0.0
+minimumCallsForOpenWithWindowSize :: Int -> Int
+minimumCallsForOpenWithWindowSize windowSize =
+  max minimumCallsForOpen (windowSize `div` 10)
+
 -- ---------------------------------------------------------------------------
 -- State Transition Predicates
 -- ---------------------------------------------------------------------------
@@ -281,25 +308,39 @@ minimumCallsForOpen = 5
 --
 -- The circuit should open when:
 --
--- 1. The sliding window has at least 'minimumCallsForOpen' calls
+-- 1. The sliding window has at least enough calls for a meaningful sample
+--    (the larger of 5 or 10% of the window size)
 -- 2. The failure rate equals or exceeds the configured threshold
+--
+-- The minimum sample size requirement ensures that under concurrent load,
+-- where result recording order is non-deterministic, the circuit doesn't
+-- open due to transient spikes in failure rate.
 --
 -- ==== __Examples__
 --
 -- @
--- -- With threshold 0.5 and 10 calls, 6 failures:
--- -- failure rate = 0.6 >= 0.5, and 10 >= 5 (minimum calls)
+-- -- With threshold 0.5, window size 100, and 10 calls (6 failures):
+-- -- minimum calls = max(5, 100 div 10) = 10
+-- -- totalCalls (10) >= minimumCalls (10) = True
+-- -- failure rate = 0.6 >= 0.5 = True
 -- -- shouldOpen returns True
+--
+-- -- With threshold 0.5, window size 100, and 5 calls (5 failures):
+-- -- minimum calls = max(5, 100 div 10) = 10
+-- -- totalCalls (5) >= minimumCalls (10) = False
+-- -- shouldOpen returns False (not enough samples yet)
 -- @
 --
 -- @since 0.1.0.0
 shouldOpen :: CircuitBreakerConfig -> CircuitBreakerState -> Bool
 shouldOpen config cbState =
   let window = cbsSlidingWindow cbState
+      windowSize = unSlidingWindowSize (slidingWindowSize config)
+      minCalls = minimumCallsForOpenWithWindowSize windowSize
       threshold = unFailureThreshold (failureThreshold config)
       totalCalls = getTotalCalls window
       failureRate = getFailureRate window
-  in totalCalls >= minimumCallsForOpen && failureRate >= threshold
+  in totalCalls >= minCalls && failureRate >= threshold
 
 -- | Check if the circuit breaker should transition from Open to HalfOpen.
 --
@@ -330,8 +371,13 @@ shouldTransitionToHalfOpen config cbState now =
 -- This function:
 --
 -- * Sets the state to 'Open'
--- * Resets the sliding window (clear all recorded results)
+-- * Preserves the sliding window (does NOT reset - mcb-oz8 fix)
 -- * Records the transition timestamp
+-- * Resets the half-open attempts counter to 0
+--
+-- Note: The sliding window is intentionally NOT reset when transitioning
+-- to Open. This ensures that in-flight calls that were permitted before
+-- the transition can still have their results recorded accurately.
 --
 -- Note: This does not invoke the state transition callback. The caller
 -- is responsible for invoking the callback if needed.
@@ -340,7 +386,6 @@ shouldTransitionToHalfOpen config cbState now =
 transitionToOpen :: UTCTime -> CircuitBreakerState -> CircuitBreakerState
 transitionToOpen now cbState = cbState
   { cbsState = Open
-  , cbsSlidingWindow = reset (cbsSlidingWindow cbState)
   , cbsLastStateChange = now
   , cbsHalfOpenAttempts = 0
   }

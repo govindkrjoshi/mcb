@@ -40,6 +40,7 @@ import CircuitBreaker
   , State (..)
   , defaultConfig
   , minimumCallsForOpen
+  , minimumCallsForOpenWithWindowSize
   , setFailureThreshold
   , setHalfOpenPermits
   , setSlidingWindowSize
@@ -51,6 +52,7 @@ import CircuitBreaker
   , transitionToOpen
   , unFailureThreshold
   , unHalfOpenPermits
+  , unSlidingWindowSize
   , unWaitDuration
   , (&)
   )
@@ -70,8 +72,8 @@ tests = testGroup "CircuitBreaker.Internal.State Properties"
       withTests 10000 prop_shouldOpenRequiresMinimumCalls
   , testProperty "shouldTransitionToHalfOpen requires wait duration elapsed" $
       withTests 10000 prop_shouldTransitionToHalfOpenRequiresWait
-  , testProperty "transitionToOpen resets window and sets Open state" $
-      withTests 1000 prop_transitionToOpenResetsWindow
+  , testProperty "transitionToOpen preserves window and sets Open state (mcb-oz8 fix)" $
+      withTests 1000 prop_transitionToOpenPreservesWindow
   , testProperty "transitionToHalfOpen preserves window, sets HalfOpen state" $
       withTests 1000 prop_transitionToHalfOpenPreservesWindow
   , testProperty "transitionToClosed resets window and sets Closed state" $
@@ -154,7 +156,7 @@ prop_stateAlwaysValid = property $ do
 -- ---------------------------------------------------------------------------
 
 -- | shouldOpen should only return True when:
--- 1. The window has at least minimumCallsForOpen calls
+-- 1. The window has at least the dynamic minimum calls (max of 5 or 10% of window size)
 -- 2. The failure rate >= threshold
 prop_shouldOpenRequiresMinimumCalls :: Property
 prop_shouldOpenRequiresMinimumCalls = property $ do
@@ -165,27 +167,31 @@ prop_shouldOpenRequiresMinimumCalls = property $ do
       totalCalls = getTotalCalls window
       failureRate = getFailureRate window
       threshold = unFailureThreshold (failureThreshold config)
+      windowSize = unSlidingWindowSize (slidingWindowSize config)
+      minCalls = minimumCallsForOpenWithWindowSize windowSize
       result = shouldOpen config cbState
 
   annotate $ "Total calls: " ++ show totalCalls
   annotate $ "Failure rate: " ++ show failureRate
   annotate $ "Threshold: " ++ show threshold
+  annotate $ "Window size: " ++ show windowSize
+  annotate $ "Min calls: " ++ show minCalls
   annotate $ "shouldOpen result: " ++ show result
 
   -- Cover both branches
-  cover 20 "under minimum calls" (totalCalls < minimumCallsForOpen)
-  cover 20 "over minimum calls" (totalCalls >= minimumCallsForOpen)
+  cover 20 "under minimum calls" (totalCalls < minCalls)
+  cover 20 "over minimum calls" (totalCalls >= minCalls)
   cover 10 "above threshold" (failureRate >= threshold)
   cover 10 "below threshold" (failureRate < threshold)
 
   -- If shouldOpen is True, then both conditions must be met
   if result
     then do
-      assert $ totalCalls >= minimumCallsForOpen
+      assert $ totalCalls >= minCalls
       assert $ failureRate >= threshold
     else
       -- If shouldOpen is False, at least one condition must be unmet
-      assert $ totalCalls < minimumCallsForOpen || failureRate < threshold
+      assert $ totalCalls < minCalls || failureRate < threshold
 
 -- ---------------------------------------------------------------------------
 -- Property: shouldTransitionToHalfOpen requires wait duration
@@ -222,21 +228,28 @@ prop_shouldTransitionToHalfOpenRequiresWait = property $ do
 
 -- | transitionToOpen should:
 -- 1. Set state to Open
--- 2. Reset the sliding window
+-- 2. Preserve the sliding window (NOT reset - mcb-oz8 fix)
 -- 3. Record the transition time
 -- 4. Reset halfOpenAttempts to 0
-prop_transitionToOpenResetsWindow :: Property
-prop_transitionToOpenResetsWindow = property $ do
+--
+-- Note: The window is NOT reset when transitioning to Open. This is intentional
+-- (mcb-oz8 fix): in-flight calls that were permitted before the transition
+-- should still have their results recorded accurately.
+prop_transitionToOpenPreservesWindow :: Property
+prop_transitionToOpenPreservesWindow = property $ do
   cbState <- forAll genCircuitBreakerState
   timestamp <- forAll genUTCTime
 
   let newState = transitionToOpen timestamp cbState
+  let originalWindowSize = getTotalCalls (cbsSlidingWindow cbState)
 
   annotate $ "Original state: " ++ show (cbsState cbState)
   annotate $ "New state: " ++ show (cbsState newState)
+  annotate $ "Original window size: " ++ show originalWindowSize
 
   cbsState newState === Open
-  getTotalCalls (cbsSlidingWindow newState) === 0
+  -- Window should be preserved, not reset
+  getTotalCalls (cbsSlidingWindow newState) === originalWindowSize
   cbsLastStateChange newState === timestamp
   cbsHalfOpenAttempts newState === 0
 

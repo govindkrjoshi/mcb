@@ -379,6 +379,7 @@ module CircuitBreaker
 
     -- * Constants
   , minimumCallsForOpen
+  , minimumCallsForOpenWithWindowSize
 
     -- * Exceptions
   , CircuitBreakerException (..)
