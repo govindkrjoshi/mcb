@@ -3,6 +3,7 @@ module Main (main) where
 import Test.Tasty (defaultMain, testGroup)
 
 import qualified Test.Unit.Exceptions as Exceptions
+import qualified Test.Unit.Predicate as Predicate
 import qualified Test.Unit.Types as Types
 import qualified Test.Unit.Timeout as Timeout
 import qualified Test.Unit.SlidingWindow as SlidingWindowUnit
@@ -18,6 +19,7 @@ main = defaultMain $ testGroup "mcb"
   [ Types.tests
   , Timeout.tests
   , Exceptions.tests
+  , Predicate.tests
   , SlidingWindowUnit.tests
   , State.tests
   , Property.tests

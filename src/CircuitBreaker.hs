@@ -402,11 +402,25 @@ module CircuitBreaker
   , isFull
   , getWindowSize
   , getFailureCount
+
+    -- * Exception Predicates
+  , defaultExceptionPredicate
+  , ignoreException
+  , onlyException
+  , matchException
+  , combinePredicates
+  , anyPredicate
+  , allPredicate
+  , ignoreExceptions
+  , onlyExceptions
+  , negatePredicate
+  , whenMatches
   ) where
 
 import CircuitBreaker.Core
 import CircuitBreaker.Exceptions
 import CircuitBreaker.Internal.State
+import CircuitBreaker.Predicate
 import CircuitBreaker.SlidingWindow
 import CircuitBreaker.Timeout
 import CircuitBreaker.Types
