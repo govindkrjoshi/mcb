@@ -29,8 +29,10 @@ module CircuitBreaker.Timeout
 import Control.Exception (Exception(..), throwIO)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Time.Clock (NominalDiffTime, nominalDiffTimeToSeconds)
-import Data.Typeable (Typeable)
+import Data.Typeable (Typeable, cast)
 import qualified System.Timeout as T
+
+import CircuitBreaker.Exceptions (CircuitBreakerException(..))
 
 -- | Exception thrown when an operation exceeds its timeout duration.
 --
@@ -56,6 +58,11 @@ instance Show TimeoutException where
 instance Exception TimeoutException where
   displayException (TimeoutException d) =
     "Operation timed out after " ++ show d
+
+  toException = toException . CircuitBreakerException
+  fromException se = do
+    CircuitBreakerException e <- fromException se
+    cast e
 
 -- | Execute an action with a timeout.
 --
