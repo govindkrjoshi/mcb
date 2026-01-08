@@ -10,6 +10,8 @@ import qualified Test.Unit.State as State
 import qualified Test.Property.Placeholder as Property
 import qualified Test.Property.SlidingWindow as SlidingWindowProp
 import qualified Test.Property.State as StateProp
+import qualified Test.Integration.WithCircuitBreaker as Integration
+import qualified Test.Performance.WithCircuitBreaker as Performance
 
 main :: IO ()
 main = defaultMain $ testGroup "mcb"
@@ -21,4 +23,6 @@ main = defaultMain $ testGroup "mcb"
   , Property.tests
   , SlidingWindowProp.tests
   , StateProp.tests
+  , Integration.tests
+  , Performance.tests
   ]

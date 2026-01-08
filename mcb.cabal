@@ -102,11 +102,14 @@ test-suite mcb-test
     Test.Property.Placeholder
     Test.Property.SlidingWindow
     Test.Property.State
+    Test.Integration.WithCircuitBreaker
+    Test.Performance.WithCircuitBreaker
   hs-source-dirs:   test
   build-depends:
       mcb
     , stm
     , time
+    , exceptions
   default-language: GHC2021
 
 benchmark mcb-bench

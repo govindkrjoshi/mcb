@@ -57,6 +57,7 @@ import CircuitBreaker.Internal.State
   ( CircuitBreaker (..)
   , CircuitBreakerState (..)
   , isCallPermittedSTM
+  , readState
   , recordFailureSTM
   , recordSuccessSTM
   )
@@ -124,7 +125,16 @@ withCircuitBreaker cb action = do
 
   -- Step 1: Check if call is permitted (STM transaction)
   -- This also handles Open -> HalfOpen transition
-  (permitted, stateBeforeAction) <- liftIO $ atomically $ isCallPermittedSTM cb now
+  -- We capture the state before permission check to detect Open -> HalfOpen
+  (permitted, stateBeforePermissionCheck, stateAfterPermissionCheck) <- liftIO $ atomically $ do
+    stateBefore <- readState cb
+    (perm, stateAfter) <- isCallPermittedSTM cb now
+    pure (perm, stateBefore, stateAfter)
+
+  -- Invoke callback if permission check caused a transition (e.g., Open -> HalfOpen)
+  let stateBeforeCheck = cbsState stateBeforePermissionCheck
+      stateAfterCheck = cbsState stateAfterPermissionCheck
+  liftIO $ invokeCallbackIfChanged config stateBeforeCheck stateAfterCheck
 
   -- Step 2: If not permitted, throw CircuitOpenException
   if not permitted
@@ -140,7 +150,7 @@ withCircuitBreaker cb action = do
             recordNow <- getCurrentTime
             atomically $ do
               stateAfter <- recordSuccessSTM cb recordNow
-              pure (cbsState stateBeforeAction, cbsState stateAfter)
+              pure (cbsState stateAfterPermissionCheck, cbsState stateAfter)
 
           -- Step 5: Execute callback outside STM if state changed
           liftIO $ invokeCallbackIfChanged config oldState newState
@@ -160,7 +170,7 @@ withCircuitBreaker cb action = do
                 if countsAsFailure
                   then recordFailureSTM cb recordNow
                   else recordSuccessSTM cb recordNow
-              pure (cbsState stateBeforeAction, cbsState stateAfter)
+              pure (cbsState stateAfterPermissionCheck, cbsState stateAfter)
 
           -- Step 5: Execute callback outside STM if state changed
           liftIO $ invokeCallbackIfChanged config oldState newState
