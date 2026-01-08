@@ -104,6 +104,9 @@ module CircuitBreaker.Exceptions
 
     -- * Specific Exceptions
   , CircuitOpenException (..)
+  , RateLimitedException (..)
+  , BulkheadRejectedException (..)
+  , RetriesExhaustedException (..)
   ) where
 
 import Control.Exception (Exception (..), SomeException)
@@ -175,6 +178,87 @@ instance Show CircuitOpenException where
 instance Exception CircuitOpenException where
   displayException (CircuitOpenException name) =
     "Circuit breaker '" ++ name ++ "' is OPEN"
+
+  toException = toCircuitBreakerException
+  fromException = fromCircuitBreakerException
+
+-- | Exception thrown when a rate limiter rejects a request.
+--
+-- This occurs when the token bucket is empty and no tokens are
+-- available for the operation.
+--
+-- ==== __Examples__
+--
+-- >>> import Control.Exception (displayException)
+-- >>> displayException RateLimitedException
+-- "Rate limit exceeded"
+--
+-- Catching the exception:
+--
+-- @
+-- withRateLimit rl action \`catch\` \\RateLimitedException ->
+--   logWarning "Rate limit exceeded, backing off"
+-- @
+--
+-- @since 0.1.0.0
+data RateLimitedException = RateLimitedException
+  deriving stock (Eq, Show, Typeable)
+
+instance Exception RateLimitedException where
+  displayException RateLimitedException = "Rate limit exceeded"
+
+  toException = toCircuitBreakerException
+  fromException = fromCircuitBreakerException
+
+-- | Exception thrown when a bulkhead rejects a request.
+--
+-- This occurs when the maximum number of concurrent operations
+-- has been reached.
+--
+-- ==== __Examples__
+--
+-- >>> import Control.Exception (displayException)
+-- >>> displayException (BulkheadRejectedException 20)
+-- "Bulkhead rejected: 20 concurrent operations active"
+--
+-- @since 0.1.0.0
+data BulkheadRejectedException = BulkheadRejectedException
+  { bulkheadActiveCount :: !Int
+    -- ^ The number of active concurrent operations when rejection occurred
+  }
+  deriving stock (Eq, Show, Typeable)
+
+instance Exception BulkheadRejectedException where
+  displayException (BulkheadRejectedException active) =
+    "Bulkhead rejected: " ++ show active ++ " concurrent operations active"
+
+  toException = toCircuitBreakerException
+  fromException = fromCircuitBreakerException
+
+-- | Exception thrown when all retry attempts have been exhausted.
+--
+-- Contains the number of attempts made and the last exception encountered.
+--
+-- ==== __Examples__
+--
+-- >>> import Control.Exception (displayException, toException)
+-- >>> let lastEx = toException (userError "connection refused")
+-- >>> displayException (RetriesExhaustedException 3 lastEx)
+-- "Retries exhausted after 3 attempts. Last error: user error (connection refused)"
+--
+-- @since 0.1.0.0
+data RetriesExhaustedException = RetriesExhaustedException
+  { retriesAttemptsMade :: !Int
+    -- ^ The number of retry attempts that were made
+  , retriesLastException :: !SomeException
+    -- ^ The last exception that caused the final retry to fail
+  }
+  deriving stock (Show, Typeable)
+
+instance Exception RetriesExhaustedException where
+  displayException (RetriesExhaustedException attempts lastEx) =
+    "Retries exhausted after " ++ show attempts ++
+    " attempts. Last error: " ++ displayException lastEx
 
   toException = toCircuitBreakerException
   fromException = fromCircuitBreakerException

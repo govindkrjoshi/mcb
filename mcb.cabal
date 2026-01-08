@@ -67,8 +67,12 @@ library
   import:           warnings, common-deps, lib-deps
   exposed-modules:
     CircuitBreaker
+    CircuitBreaker.Bulkhead
     CircuitBreaker.Exceptions
     CircuitBreaker.Predicate
+    CircuitBreaker.RateLimiter
+    CircuitBreaker.Resilience
+    CircuitBreaker.Retry
     CircuitBreaker.SlidingWindow
     CircuitBreaker.Timeout
     CircuitBreaker.Types
@@ -77,6 +81,8 @@ library
     CircuitBreaker.Internal.State
   hs-source-dirs:   src
   default-language: GHC2021
+  build-depends:
+    , random >= 1.2 && < 1.3
 
   if flag(opentelemetry)
     build-depends:  hs-opentelemetry-api >= 0.1 && < 0.2
@@ -95,8 +101,11 @@ test-suite mcb-test
   type:             exitcode-stdio-1.0
   main-is:          Main.hs
   other-modules:
+    Test.Unit.Bulkhead
     Test.Unit.Exceptions
     Test.Unit.Predicate
+    Test.Unit.RateLimiter
+    Test.Unit.Retry
     Test.Unit.Types
     Test.Unit.Timeout
     Test.Unit.SlidingWindow
@@ -104,6 +113,7 @@ test-suite mcb-test
     Test.Property.Placeholder
     Test.Property.SlidingWindow
     Test.Property.State
+    Test.Integration.Resilience
     Test.Integration.WithCircuitBreaker
     Test.Performance.WithCircuitBreaker
   hs-source-dirs:   test

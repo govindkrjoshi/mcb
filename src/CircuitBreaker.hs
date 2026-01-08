@@ -415,12 +415,57 @@ module CircuitBreaker
   , onlyExceptions
   , negatePredicate
   , whenMatches
+
+    -- * Rate Limiter
+  , RateLimiter
+  , RateLimiterConfig (..)
+  , newRateLimiter
+  , withRateLimit
+  , tryConsume
+  , getAvailableTokens
+  , RateLimitedException (..)
+
+    -- * Bulkhead
+  , Bulkhead
+  , BulkheadConfig (..)
+  , newBulkhead
+  , withBulkhead
+  , tryAcquire
+  , release
+  , getActiveCount
+  , getMaxConcurrent
+  , BulkheadRejectedException (..)
+
+    -- * Retry
+  , RetryConfig (..)
+  , BackoffStrategy (..)
+  , defaultRetryConfig
+  , withRetry
+  , setMaxAttempts
+  , setBackoffStrategy
+  , setShouldRetry
+  , setOnRetry
+  , RetriesExhaustedException (..)
+
+    -- * Resilience Composition
+  , ResilienceConfig (..)
+  , defaultResilienceConfig
+  , withResilience
+  , addCircuitBreaker
+  , addTimeout
+  , addBulkhead
+  , addRateLimiter
+  , addRetry
   ) where
 
+import CircuitBreaker.Bulkhead
 import CircuitBreaker.Core
 import CircuitBreaker.Exceptions
 import CircuitBreaker.Internal.State
 import CircuitBreaker.Predicate
+import CircuitBreaker.RateLimiter
+import CircuitBreaker.Resilience
+import CircuitBreaker.Retry
 import CircuitBreaker.SlidingWindow
 import CircuitBreaker.Timeout
 import CircuitBreaker.Types
