@@ -79,7 +79,20 @@ module CircuitBreaker
   , seconds
   , milliseconds
   , minutes
+
+    -- * Sliding Window
+  , SlidingWindow
+  , newSlidingWindow
+  , insertResult
+  , reset
+  , getFailureRate
+  , getTotalCalls
+  , isEmpty
+  , isFull
+  , getWindowSize
+  , getFailureCount
   ) where
 
+import CircuitBreaker.SlidingWindow
 import CircuitBreaker.Timeout
 import CircuitBreaker.Types

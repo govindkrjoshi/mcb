@@ -67,6 +67,7 @@ library
   import:           warnings, common-deps, lib-deps
   exposed-modules:
     CircuitBreaker
+    CircuitBreaker.SlidingWindow
     CircuitBreaker.Timeout
     CircuitBreaker.Types
   hs-source-dirs:   src
