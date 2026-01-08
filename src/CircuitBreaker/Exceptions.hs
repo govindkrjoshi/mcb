@@ -18,23 +18,84 @@
 --
 -- @
 -- CircuitBreakerException (parent type)
---   ├── CircuitOpenException   -- Circuit is open, requests rejected
---   └── TimeoutException       -- Operation timed out (from CircuitBreaker.Timeout)
+--   |
+--   +-- CircuitOpenException   -- Circuit is open, requests rejected
+--   |
+--   +-- TimeoutException       -- Operation timed out (from CircuitBreaker.Timeout)
 -- @
 --
--- = Catching Exceptions
+-- = Catching Specific Exceptions
+--
+-- Catch a specific exception type when you need to handle it differently:
 --
 -- @
--- import Control.Exception (catch, SomeException)
--- import CircuitBreaker.Exceptions
+-- import Control.Exception (catch)
+-- import CircuitBreaker
 --
--- -- Catch a specific exception
--- action \`catch\` \\(CircuitOpenException name) ->
---   putStrLn $ "Circuit " ++ name ++ " is open"
+-- callService :: IO Response
+-- callService = withCircuitBreaker cb action
+--   \`catch\` \\(CircuitOpenException name) -> do
+--     logWarning $ "Circuit " ++ name ++ " is open, using cached response"
+--     getCachedResponse
+--   \`catch\` \\(TimeoutException duration) -> do
+--     logWarning $ "Request timed out after " ++ show duration
+--     getDefaultResponse
+-- @
 --
--- -- Catch all circuit breaker exceptions
--- action \`catch\` \\(CircuitBreakerException e) ->
---   putStrLn $ "Circuit breaker error: " ++ displayException e
+-- = Catching All Circuit Breaker Exceptions
+--
+-- Use 'CircuitBreakerException' to catch any exception from the circuit breaker:
+--
+-- @
+-- import Control.Exception (catch)
+-- import CircuitBreaker
+--
+-- callService :: IO Response
+-- callService = withCircuitBreaker cb action
+--   \`catch\` \\(CircuitBreakerException e) -> do
+--     logError $ "Circuit breaker failure: " ++ displayException e
+--     getDefaultResponse
+-- @
+--
+-- = Retry Pattern
+--
+-- Example of retrying with exponential backoff when the circuit is open:
+--
+-- @
+-- import Control.Concurrent (threadDelay)
+-- import Control.Exception (catch)
+-- import CircuitBreaker
+--
+-- callWithRetry :: Int -> IO Response
+-- callWithRetry maxRetries = go 0
+--   where
+--     go n
+--       | n >= maxRetries = error "Max retries exceeded"
+--       | otherwise = withCircuitBreaker cb action
+--           \`catch\` \\(CircuitOpenException _) -> do
+--             let delayMs = 1000 * (2 ^ n)  -- exponential backoff
+--             threadDelay (delayMs * 1000)
+--             go (n + 1)
+-- @
+--
+-- = Logging with Context
+--
+-- Include circuit breaker context in your logs:
+--
+-- @
+-- import Control.Exception (catch)
+-- import CircuitBreaker
+--
+-- callService :: IO Response
+-- callService = withCircuitBreaker cb action
+--   \`catch\` \\(CircuitOpenException name) -> do
+--     logWithContext
+--       [ ("circuit_breaker", name)
+--       , ("event", "circuit_open")
+--       , ("action", "fallback")
+--       ]
+--       "Circuit breaker rejected request"
+--     getFallbackResponse
 -- @
 
 module CircuitBreaker.Exceptions
