@@ -92,6 +92,7 @@ test-suite mcb-test
   other-modules:
     Test.Unit.Types
     Test.Unit.Timeout
+    Test.Unit.SlidingWindow
     Test.Property.Placeholder
     Test.Property.SlidingWindow
   hs-source-dirs:   test
