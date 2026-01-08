@@ -107,8 +107,6 @@ withTimeout duration action = liftIO $ do
 -- >>> seconds 5
 -- 5s
 --
--- >>> withTimeout (seconds 5) someAction
---
 -- @since 0.1.0.0
 seconds :: Double -> NominalDiffTime
 seconds = realToFrac
@@ -120,8 +118,6 @@ seconds = realToFrac
 -- >>> milliseconds 500
 -- 0.5s
 --
--- >>> withTimeout (milliseconds 100) someAction
---
 -- @since 0.1.0.0
 milliseconds :: Double -> NominalDiffTime
 milliseconds ms = realToFrac (ms / 1000)
@@ -132,8 +128,6 @@ milliseconds ms = realToFrac (ms / 1000)
 --
 -- >>> minutes 2
 -- 120s
---
--- >>> withTimeout (minutes 5) someLongRunningAction
 --
 -- @since 0.1.0.0
 minutes :: Double -> NominalDiffTime

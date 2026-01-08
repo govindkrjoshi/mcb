@@ -77,7 +77,7 @@ library
     CircuitBreaker.SlidingWindow
     CircuitBreaker.Timeout
     CircuitBreaker.Types
-  other-modules:
+    -- Internal modules (exposed for doctest, not for public use)
     CircuitBreaker.Core
     CircuitBreaker.Internal.State
   hs-source-dirs:   src

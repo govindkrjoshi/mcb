@@ -3,3 +3,6 @@ packages: .
 -- Development settings
 tests: True
 benchmarks: True
+
+-- Required for doctest-parallel to find modules
+write-ghc-environment-files: always

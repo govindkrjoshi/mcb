@@ -243,8 +243,8 @@ instance Exception BulkheadRejectedException where
 --
 -- >>> import Control.Exception (displayException, toException)
 -- >>> let lastEx = toException (userError "connection refused")
--- >>> displayException (RetriesExhaustedException 3 lastEx)
--- "Retries exhausted after 3 attempts. Last error: user error (connection refused)"
+-- >>> putStr $ displayException (RetriesExhaustedException 3 lastEx)
+-- Retries exhausted after 3 attempts. Last error: user error (connection refused)
 --
 -- @since 0.1.0.0
 data RetriesExhaustedException = RetriesExhaustedException
