@@ -67,9 +67,12 @@ library
   import:           warnings, common-deps, lib-deps
   exposed-modules:
     CircuitBreaker
+    CircuitBreaker.Exceptions
     CircuitBreaker.SlidingWindow
     CircuitBreaker.Timeout
     CircuitBreaker.Types
+  other-modules:
+    CircuitBreaker.Internal.State
   hs-source-dirs:   src
   default-language: GHC2021
 

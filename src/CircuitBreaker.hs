@@ -73,6 +73,24 @@ module CircuitBreaker
   , setExceptionPredicate
   , setOnStateTransition
 
+    -- * Circuit Breaker Handle
+  , CircuitBreaker
+  , CircuitBreakerState (..)
+  , newCircuitBreaker
+
+    -- * STM Operations
+  , readState
+  , updateState
+
+    -- * Convenient Queries
+  , getCurrentState
+  , getFailureRateIO
+  , getCircuitBreakerState
+
+    -- * Exceptions
+  , CircuitBreakerException (..)
+  , CircuitOpenException (..)
+
     -- * Timeout
   , TimeoutException (..)
   , withTimeout
@@ -93,6 +111,8 @@ module CircuitBreaker
   , getFailureCount
   ) where
 
+import CircuitBreaker.Exceptions
+import CircuitBreaker.Internal.State
 import CircuitBreaker.SlidingWindow
 import CircuitBreaker.Timeout
 import CircuitBreaker.Types
