@@ -15,6 +15,7 @@ module Test.Property.State
   ( tests
   ) where
 
+import Data.List (foldl')
 import Hedgehog
   ( Gen
   , Property

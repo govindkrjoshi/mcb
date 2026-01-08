@@ -2,6 +2,7 @@ module Test.Property.SlidingWindow
   ( tests
   ) where
 
+import Data.List (foldl')
 import Hedgehog (Property, Gen, property, (===), forAll, assert, annotate, annotateShow, withTests)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
