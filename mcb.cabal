@@ -72,6 +72,7 @@ library
     CircuitBreaker.Timeout
     CircuitBreaker.Types
   other-modules:
+    CircuitBreaker.Core
     CircuitBreaker.Internal.State
   hs-source-dirs:   src
   default-language: GHC2021
@@ -116,4 +117,14 @@ benchmark mcb-bench
   build-depends:
       mcb
     , criterion >= 1.6 && < 1.7
+  default-language: GHC2021
+
+test-suite mcb-doctest
+  import:           warnings, common-deps
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   doctest
+  build-depends:
+      mcb
+    , doctest-parallel >= 0.3 && < 0.4
   default-language: GHC2021
