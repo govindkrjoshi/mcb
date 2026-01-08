@@ -93,14 +93,18 @@ test-suite mcb-test
   type:             exitcode-stdio-1.0
   main-is:          Main.hs
   other-modules:
+    Test.Unit.Exceptions
     Test.Unit.Types
     Test.Unit.Timeout
     Test.Unit.SlidingWindow
+    Test.Unit.State
     Test.Property.Placeholder
     Test.Property.SlidingWindow
   hs-source-dirs:   test
   build-depends:
-    mcb
+      mcb
+    , stm
+    , time
   default-language: GHC2021
 
 benchmark mcb-bench
